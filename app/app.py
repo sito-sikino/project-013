@@ -28,6 +28,26 @@ def get_channel_name_from_id(channel_id: str) -> str:
     return channel_mapping.get(channel_id, "unknown")
 
 
+def get_channel_id_from_name(channel_name: str) -> str:
+    """論理チャンネル名をDiscord IDにマッピング
+    
+    Args:
+        channel_name: 論理チャンネル名
+        
+    Returns:
+        str: Discord チャンネルID
+    """
+    from app import settings
+    
+    channel_mapping = {
+        "command-center": settings.settings.discord.chan_command_center,
+        "creation": settings.settings.discord.chan_creation,
+        "development": settings.settings.discord.chan_development,
+        "lounge": settings.settings.discord.chan_lounge
+    }
+    return channel_mapping.get(channel_name, settings.settings.discord.chan_command_center)
+
+
 def select_typing_bot(channel_name: str, text: str) -> str:
     """即時Typing用の簡単なボット選択
     
@@ -93,8 +113,21 @@ async def on_slash(
 
 async def on_tick() -> None:
     """自発発言処理ハンドラ（低優先度）"""
-    print("Tick event received - Low priority auto posting")
-    # TODO: 本格実装（自発発言・LLM処理等）
+    from app import state
+    
+    # active_channelに自発発言投稿（10-2: 選定Bot名義・Typing→Send・LLM1回・Redis追記・log_ok）
+    active_channel = state.get_active_channel()
+    channel_id = get_channel_id_from_name(active_channel)
+    payload_summary = f"auto_tick:{active_channel}"
+    
+    await common_sequence(
+        event_type="auto_tick",
+        channel=active_channel,
+        actor="system",
+        payload_summary=payload_summary,
+        llm_kind="auto",
+        llm_channel=channel_id
+    )
 
 
 async def on_report_0600() -> None:

@@ -121,7 +121,7 @@ Slash入力と通知を Redis に追記。E2Eで State/Redis/Discord/Log が一�
 
 - [x] 10-1 スケジューラ  
 **AC**: dev=15s/100%（**最大5分**で停止）、prod=300s/33%。外れtickは何もしない。
-- [ ] 10-2 投稿  
+- [x] 10-2 投稿  
 **AC**: `active_channel` に **選定Bot名義**で Typing→Send。LLM1回・Redis追記・log_ok。
 - [ ] 10-3 優先度  
 **AC**: Slash/User が到着していれば tick は後回し（直列で保証）。
