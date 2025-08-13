@@ -101,7 +101,7 @@ logs/run.log（空で可）
 
 - [x] 8-1 パース/バリデーション  
 **AC**: `<channel>` ∈ {creation,development}、`<内容>` は文字列。**少なくとも一方**必須。違反は例外（Fail-Fast）。
-- [ ] 8-2 状態更新/決定通知  
+- [x] 8-2 状態更新/決定通知  
 **AC**: `task` 更新→ `active_channel=<channel>` **即上書き**。  
 **command-center** に **Spectra名義で短い決定通知1本**（Typing→Send）。  
 Slash入力と通知を Redis に追記。E2Eで State/Redis/Discord/Log が一貫。

@@ -25,12 +25,8 @@ async def on_slash(
     channel: Optional[str] = None, content: Optional[str] = None
 ) -> None:
     """スラッシュコマンド受信ハンドラ"""
-    # Fail-Fast: コマンド必須パラメータ検証
-    if not channel and not content:
-        raise ValueError("Slash command requires at least channel or content parameter")
-
-    print(f"Slash command received - Channel: {channel}, Content: {content}")
-    # TODO: 本格実装（タスク更新・状態変更等）
+    # 8-2: execute_slash_commandに委譲
+    await execute_slash_command(channel, content)
 
 
 async def on_tick() -> None:
@@ -243,6 +239,94 @@ def parse_slash_command(
             raise ValueError("Content cannot be empty string")
 
     return {"channel": channel, "content": content}
+
+
+async def execute_slash_command(
+    channel: Optional[str] = None, content: Optional[str] = None
+) -> None:
+    """8-2: Slashコマンド実行（状態更新/決定通知）
+
+    Args:
+        channel: チャンネル名（creation|development|None）
+        content: タスク内容（文字列|None）
+
+    処理フロー:
+        1. バリデーション（parse_slash_command使用）
+        2. 状態更新（task + active_channel即座上書き）
+        3. 決定通知（command-centerにSpectra名義）
+        4. Redis追記（ユーザー入力記録）
+        5. ログ記録（log_ok）
+
+    Raises:
+        SystemExit: エラー時（Fail-Fast）
+    """
+    from app import state, store, logger, settings
+
+    try:
+        # 1. バリデーション
+        parsed = parse_slash_command(channel, content)
+        validated_channel = parsed["channel"]
+        validated_content = parsed["content"]
+
+        # 2. 状態更新
+        state.update_task(content=validated_content, channel=validated_channel)
+        if validated_channel is not None:
+            # 即座上書き
+            state.set_active_channel(validated_channel)
+
+        # 3. 決定通知用のペイロード作成
+        if validated_channel and validated_content:
+            notification_text = f"タスク決定: [{validated_channel}] {validated_content}"
+        elif validated_channel:
+            notification_text = f"チャンネル切替: {validated_channel}"
+        elif validated_content:
+            notification_text = f"タスク更新: {validated_content}"
+        else:
+            notification_text = "設定更新"
+
+        # 4. Redis追記（ユーザー入力）
+        user_input_summary = f"channel={validated_channel}, content={validated_content}"
+        store.append("user", "command-center", f"/task commit {user_input_summary}")
+
+        # 5. 決定通知（command-centerにSpectra名義）
+        await common_sequence(
+            event_type="slash",
+            channel="command-center",
+            actor="spectra",
+            payload_summary=notification_text,
+            llm_kind="reply",
+            llm_channel=settings.settings.discord.chan_command_center,
+        )
+
+        # 6. 成功ログ
+        logger.log_ok("slash", "command-center", "spectra", "slash_execution_completed")
+
+    except Exception as e:
+        # Fail-Fast: エラー時はlog_err後SystemExit
+        error_stage = "slash"  # Slashコマンド実行段階
+
+        # エラー種別の推定
+        error_str = str(e).lower()
+        if "invalid" in error_str or "validation" in error_str:
+            error_stage = "slash"
+        elif "state" in error_str:
+            error_stage = "slash"
+        elif "redis" in error_str or "store" in error_str:
+            error_stage = "memory"
+        elif "common_sequence" in error_str or "notification" in error_str:
+            error_stage = "send"
+
+        logger.log_err(
+            "slash",
+            "command-center",
+            "spectra",
+            f"channel={channel}, content={content}",
+            error_stage,
+            str(e),
+        )
+        import sys
+
+        sys.exit(1)
 
 
 if __name__ == "__main__":
