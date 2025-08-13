@@ -110,7 +110,7 @@ Slash入力と通知を Redis に追記。E2Eで State/Redis/Discord/Log が一�
 
 ## 9. ユーザー応答（即応答）
 
-- [ ] 9-1 応答フロー  
+- [x] 9-1 応答フロー  
 **AC**: 受信CHへ **選定Bot名義で Typing→Send**。LLMは1回、上限内（途中切断なし）。Redisに user発言+bot応答 を追記。
 - [ ] 9-2 体感速度  
 **AC**: 受信→Typing 呼び出しがイベントハンドラ内で即時。

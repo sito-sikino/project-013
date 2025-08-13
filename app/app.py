@@ -7,6 +7,26 @@ from enum import Enum
 from dataclasses import dataclass
 
 
+def get_channel_name_from_id(channel_id: str) -> str:
+    """Discord チャンネルIDを論理チャンネル名にマッピング
+    
+    Args:
+        channel_id: Discord チャンネルID
+        
+    Returns:
+        str: 論理チャンネル名 (command-center|creation|development|lounge|unknown)
+    """
+    from app import settings
+    
+    channel_mapping = {
+        settings.settings.discord.chan_command_center: "command-center",
+        settings.settings.discord.chan_creation: "creation",
+        settings.settings.discord.chan_development: "development", 
+        settings.settings.discord.chan_lounge: "lounge"
+    }
+    return channel_mapping.get(channel_id, "unknown")
+
+
 async def on_user(channel: str, text: str, user_id: str) -> None:
     """ユーザーメッセージ受信ハンドラ"""
     # Fail-Fast: 必須パラメータ検証
@@ -17,8 +37,24 @@ async def on_user(channel: str, text: str, user_id: str) -> None:
     if not user_id:
         raise ValueError("User ID cannot be empty")
 
-    print(f"User message received - Channel: {channel}, User: {user_id}, Text: {text}")
-    # TODO: 本格実装（LLM処理・応答等）
+    from app import store
+    
+    # チャンネルIDを論理チャンネル名にマッピング
+    channel_name = get_channel_name_from_id(channel)
+    
+    # ユーザーメッセージをRedisに格納
+    store.append("user", channel_name, text)
+    
+    # 共通シーケンスで応答（選定Bot名義・Typing→Send→Redis追記）
+    payload_summary = text[:80]  # 80文字以内に切り詰め
+    await common_sequence(
+        event_type="user_msg",
+        channel=channel_name, 
+        actor="user",
+        payload_summary=payload_summary,
+        llm_kind="reply",
+        llm_channel=channel
+    )
 
 
 async def on_slash(
