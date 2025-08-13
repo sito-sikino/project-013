@@ -148,7 +148,7 @@ Slash入力と通知を Redis に追記。E2Eで State/Redis/Discord/Log が一�
 
 ## 13. スケジューラ結線（app.py 内）
 
-- [ ] 13-1 モード追従  
+- [x] 13-1 モード追従  
 **AC**: `mode_from_time(now)` で `state.mode` を随時更新。ACTIVE初期は command-center、FREEは lounge。
 - [ ] 13-2 06:00 呼び出し  
 **AC**: 稼働中は 06:00 に `on_report_0600()` を1回だけ呼ぶ。

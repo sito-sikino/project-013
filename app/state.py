@@ -59,24 +59,23 @@ def mode_from_time(now_jst: datetime) -> Mode:
     current_time = now_jst.time()
     
     # 設定から時刻を取得
-    standby_start = _parse_time_string(settings.schedule.standby_start)
-    processing_at = _parse_time_string(settings.schedule.processing_at)
-    free_start = _parse_time_string(settings.schedule.free_start)
+    standby_start = _parse_time_string(settings.schedule.standby_start)  # 00:00
+    processing_at = _parse_time_string(settings.schedule.processing_at)  # 06:00
+    free_start = _parse_time_string(settings.schedule.free_start)        # 20:00
     
     # 06:00 PROCESSING タイムチェック (日報生成時)
     if current_time.hour == processing_at.hour and current_time.minute == processing_at.minute:
         return Mode.PROCESSING
     
-    # FREE_START 以降（同日内）は FREE モード
+    # FREE_START 以降（同日内）は FREE モード (20:00-23:59)
     if current_time >= free_start:
         return Mode.FREE
     
-    # STANDBY_START 以降、FREE_START 未満は ACTIVE モード
-    # STANDBY_START が 00:00 の場合、00:00-FREE_START の範囲がACTIVE
-    if current_time >= standby_start and current_time < free_start:
+    # PROCESSING_AT 以降、FREE_START 未満は ACTIVE モード (06:00-19:59, 06:00除く)
+    if current_time >= processing_at and current_time < free_start:
         return Mode.ACTIVE
     
-    # 22:00 以降 23:59:59 までは STANDBY モード (FREE_START 後の深夜時間)
+    # 00:00-06:00 は STANDBY モード
     return Mode.STANDBY
 
 
@@ -170,6 +169,12 @@ def get_task() -> Task:
     return get_state().task
 
 
+def get_current_jst_time() -> datetime:
+    """現在のJST時間を取得"""
+    jst_tz = ZoneInfo("Asia/Tokyo")
+    return datetime.now(jst_tz)
+
+
 # Test functions for development
 def _test_time_modes() -> bool:
     """時刻ベースのモード判定テスト"""
@@ -178,8 +183,8 @@ def _test_time_modes() -> bool:
     # Test cases for different times
     # Schedule: STANDBY_START=00:00, PROCESSING_AT=06:00, FREE_START=20:00
     test_cases = [
-        (datetime(2025, 8, 13, 0, 0, tzinfo=jst_tz), Mode.ACTIVE),     # 00:00 - ACTIVE (STANDBY_START)
-        (datetime(2025, 8, 13, 5, 30, tzinfo=jst_tz), Mode.ACTIVE),    # 05:30 - ACTIVE (00:00-05:59)
+        (datetime(2025, 8, 13, 0, 0, tzinfo=jst_tz), Mode.STANDBY),    # 00:00 - STANDBY (00:00-05:59)
+        (datetime(2025, 8, 13, 5, 30, tzinfo=jst_tz), Mode.STANDBY),   # 05:30 - STANDBY (00:00-05:59)
         (datetime(2025, 8, 13, 6, 0, tzinfo=jst_tz), Mode.PROCESSING), # 06:00 - PROCESSING (exactly 06:00)
         (datetime(2025, 8, 13, 6, 1, tzinfo=jst_tz), Mode.ACTIVE),     # 06:01 - ACTIVE (06:01-19:59)
         (datetime(2025, 8, 13, 8, 0, tzinfo=jst_tz), Mode.ACTIVE),     # 08:00 - ACTIVE

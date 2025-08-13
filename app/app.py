@@ -578,6 +578,88 @@ class DailyReportScheduler:
 daily_report_scheduler = DailyReportScheduler()
 
 
+class ModeTrackingScheduler:
+    """モード追従スケジューラ（13-1：時刻連動でstate.mode自動更新）
+    
+    JST時刻に基づいてシステムモードを自動的に更新します。
+    STANDBY（00:00-06:00）→ ACTIVE（06:00-20:00）→ FREE（20:00-24:00）
+    モード切り替え時にactive_channelも適切に設定します。
+    
+    Features:
+        - 1分間隔での時刻監視
+        - 不要な更新の回避（モードが変更済みの場合はスキップ）
+        - Fail-Fast原則（エラー時即中断）
+    """
+    
+    def __init__(self) -> None:
+        """ModeTrackingScheduler初期化"""
+        self.is_running: bool = False
+        self._task: Optional[asyncio.Task] = None
+        
+    async def start(self) -> None:
+        """スケジューラー開始（監視ループ）
+        
+        1分間隔でモード追従を監視し、時刻に応じたモード更新を行います。
+        すでに動作中の場合はエラーとなります。
+        
+        Raises:
+            RuntimeError: 既にスケジューラが動作中の場合
+        """
+        if self.is_running:
+            raise RuntimeError("ModeTrackingScheduler is already running")
+        
+        self.is_running = True
+        
+        try:
+            # 1分間隔で監視（モード切り替えタイミング検出のため）
+            while self.is_running:
+                await self._monitoring_iteration()
+                await asyncio.sleep(60)  # 1分待機
+        finally:
+            self.is_running = False
+    
+    def stop(self) -> None:
+        """スケジューラー停止
+        
+        監視ループを停止します。現在実行中のモード更新処理は完了を待ちません。
+        """
+        self.is_running = False
+    
+    async def _monitoring_iteration(self) -> None:
+        """監視イテレーション（1回分）
+        
+        現在時刻からモードを判定し、必要に応じてstate更新を行います。
+        1分間隔の監視ループから呼び出されます。
+        """
+        self.update_mode_from_time()
+    
+    def update_mode_from_time(self) -> None:
+        """時刻からモードを更新
+        
+        現在のJST時刻を取得し、mode_from_time()で適切なモードを判定。
+        現在のモードと異なる場合のみstate更新を実行します。
+        """
+        from app import state
+        
+        # 現在時刻とモード判定
+        current_time = state.get_current_jst_time()
+        expected_mode = state.mode_from_time(current_time)
+        
+        # 現在のstate取得
+        current_state = state.get_state()
+        
+        # モードが既に正しい場合は更新しない
+        if current_state.mode == expected_mode:
+            return
+        
+        # モード更新（update_mode内でactive_channelも自動更新される）
+        state.update_mode(expected_mode)
+
+
+# グローバルモード追従スケジューラインスタンス
+mode_tracking_scheduler = ModeTrackingScheduler()
+
+
 async def common_sequence(
     event_type: str,
     channel: str,
