@@ -27,10 +27,10 @@ logs/run.log（空で可）
 
 ## 1. 設定と環境（settings.py / .env）
 
-- [ ] 1-1 `.env.template` 作成  
+- [x] 1-1 `.env.template` 作成  
 **AC**: すべてのキーを含む（ダミー値可）  
 `ENV, TZ, SPECTRA_TOKEN, LYNQ_TOKEN, PAZ_TOKEN, CHAN_COMMAND_CENTER, CHAN_CREATION, CHAN_DEVELOPMENT, CHAN_LOUNGE, REDIS_URL, GEMINI_API_KEY, TICK_INTERVAL_SEC_DEV, TICK_PROB_DEV, MAX_TEST_MINUTES, TICK_INTERVAL_SEC_PROD, TICK_PROB_PROD, STANDBY_START, PROCESSING_AT, FREE_START, LIMIT_CC, LIMIT_CR, LIMIT_DEV, LIMIT_LO, LOG_FILE`
-- [ ] 1-2 `settings.py` 実装（Fail-Fast）  
+- [x] 1-2 `settings.py` 実装（Fail-Fast）  
 **AC**: `.env` 読込・型変換・必須キー検証（欠落/不正値で例外→プロセス終了）。欠落テストで確実に落ちる。
 
 ---
