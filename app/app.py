@@ -3,7 +3,7 @@
 
 import asyncio
 import time
-from typing import Optional, Callable, Union
+from typing import Optional, Callable, Union, Any, Tuple
 from enum import Enum
 from dataclasses import dataclass
 
@@ -147,25 +147,72 @@ class EventPriority(Enum):
 
 @dataclass
 class EventItem:
-    """イベントアイテム定義"""
+    """イベントアイテム定義
+    
+    優先度キューで使用するイベント情報を格納します。
+    優先度での比較をサポートし、同じ優先度の場合は安定ソートを提供します。
+    """
 
     priority: EventPriority
-    handler: Callable
-    args: tuple
-    kwargs: dict
+    handler: Callable[..., Any]
+    args: Tuple[Any, ...]
+    kwargs: dict[str, Any]
+    
+    def __lt__(self, other: 'EventItem') -> bool:
+        """優先度での比較（同じ優先度の場合はオブジェクトIDで比較）
+        
+        Args:
+            other: 比較対象のEventItem
+            
+        Returns:
+            bool: 自身が他方より高優先度（小さい値）の場合True
+            
+        Note:
+            同じ優先度の場合はオブジェクトIDで比較し、安定的な順序を保証します。
+        """
+        if not isinstance(other, EventItem):
+            return NotImplemented
+        if self.priority != other.priority:
+            return self.priority.value < other.priority.value
+        # 同じ優先度の場合はオブジェクトIDで比較（安定的な順序保証）
+        return id(self) < id(other)
 
 
 class EventQueue:
-    """イベント優先度制御キュー（直列処理）"""
+    """イベント優先度制御キュー（直列処理）
+    
+    Slash（最高）→ User（中）→ Tick（低）の優先度でイベントを管理し、
+    直列処理を保証する非同期キューシステムです。
+    
+    Features:
+        - 優先度付きキューによる順序制御
+        - 直列実行保証（同時実行なし）
+        - Fail-Fast原則（エラー時即中断）
+    """
 
-    def __init__(self):
-        self._queue = asyncio.PriorityQueue()
-        self._processing = False
+    def __init__(self) -> None:
+        """EventQueue初期化
+        
+        内部的にasyncio.PriorityQueueを使用し、
+        処理中フラグで直列実行を制御します。
+        """
+        self._queue: asyncio.PriorityQueue[Tuple[int, EventItem]] = asyncio.PriorityQueue()
+        self._processing: bool = False
 
     async def enqueue(
-        self, priority: EventPriority, handler: Callable, *args, **kwargs
-    ):
-        """イベントをキューに追加"""
+        self, priority: EventPriority, handler: Callable[..., Any], *args: Any, **kwargs: Any
+    ) -> None:
+        """イベントをキューに追加
+        
+        Args:
+            priority: イベント優先度（EventPriority）
+            handler: 実行するハンドラー関数
+            *args: ハンドラーに渡す位置引数
+            **kwargs: ハンドラーに渡すキーワード引数
+            
+        Raises:
+            ValueError: handlerがcallableでない場合
+        """
         # Fail-Fast: パラメータ検証
         if not callable(handler):
             raise ValueError("Handler must be callable")
@@ -173,8 +220,15 @@ class EventQueue:
         item = EventItem(priority, handler, args, kwargs)
         await self._queue.put((priority.value, item))
 
-    async def process_events(self):
-        """キュー内イベントを順次処理（直列実行・Fail-Fast）"""
+    async def process_events(self) -> None:
+        """キュー内イベントを順次処理（直列実行・Fail-Fast）
+        
+        無限ループでキューからイベントを取得し、優先度順に直列実行します。
+        処理中は他のイベントをブロックし、エラー時はFail-Fast原則で即座に中断します。
+        
+        Raises:
+            ValueError: イベント処理中にエラーが発生した場合
+        """
         while True:
             try:
                 if self._processing:
@@ -221,8 +275,8 @@ class TickScheduler:
         """設定値検証（Fail-Fast原則）"""
         from app import settings
         
-        prob_dev = settings.settings.tick.tick_prob_dev
-        prob_prod = settings.settings.tick.tick_prob_prod
+        prob_dev = settings.settings.tick.prob_dev
+        prob_prod = settings.settings.tick.prob_prod
         
         if not (0.0 <= prob_dev <= 1.0):
             raise ValueError(f"Invalid tick_prob_dev: {prob_dev}. Must be 0.0-1.0")
@@ -233,25 +287,25 @@ class TickScheduler:
         """環境別tick間隔取得"""
         from app import settings
         
-        if settings.settings.env == "dev":
-            return settings.settings.tick.tick_interval_sec_dev
+        if settings.settings.environment.env == "dev":
+            return settings.settings.tick.interval_sec_dev
         else:
-            return settings.settings.tick.tick_interval_sec_prod
+            return settings.settings.tick.interval_sec_prod
 
     def get_tick_probability(self) -> float:
         """環境別tick確率取得"""
         from app import settings
         
-        if settings.settings.env == "dev":
-            return settings.settings.tick.tick_prob_dev
+        if settings.settings.environment.env == "dev":
+            return settings.settings.tick.prob_dev
         else:
-            return settings.settings.tick.tick_prob_prod
+            return settings.settings.tick.prob_prod
 
     def get_max_runtime(self) -> Optional[int]:
         """最大実行時間取得（dev環境のみ）"""
         from app import settings
         
-        if settings.settings.env == "dev":
+        if settings.settings.environment.env == "dev":
             return settings.settings.tick.max_test_minutes * 60  # 分→秒変換
         else:
             return None  # prod環境は無制限
