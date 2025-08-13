@@ -207,6 +207,44 @@ async def common_sequence(
         sys.exit(1)
 
 
+def parse_slash_command(
+    channel: Optional[str] = None, content: Optional[str] = None
+) -> dict:
+    """8-1: Slashコマンドパース/バリデーション
+
+    Args:
+        channel: チャンネル名（creation|development）
+        content: タスク内容（文字列）
+
+    Returns:
+        dict: {"channel": str|None, "content": str|None}
+
+    Raises:
+        ValueError: バリデーション失敗時（Fail-Fast）
+    """
+    # Fail-Fast: 少なくとも一方は必須
+    if channel is None and content is None:
+        raise ValueError("At least one of channel or content must be provided")
+
+    # Fail-Fast: channelバリデーション
+    if channel is not None:
+        if not isinstance(channel, str) or channel == "":
+            raise ValueError("Invalid channel: must be non-empty string")
+        if channel not in ["creation", "development"]:
+            raise ValueError(
+                f"Invalid channel: {channel}. Must be 'creation' or 'development'"
+            )
+
+    # Fail-Fast: contentバリデーション
+    if content is not None:
+        if not isinstance(content, str):
+            raise ValueError("Content must be a string or None")
+        if content == "":
+            raise ValueError("Content cannot be empty string")
+
+    return {"channel": channel, "content": content}
+
+
 if __name__ == "__main__":
     from app.discord import start_spectra_client
 
