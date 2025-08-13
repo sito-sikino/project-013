@@ -57,9 +57,9 @@ logs/run.log（空で可）
 
 ## 4. ステート（state.py）
 
-- [ ] 4-1 型と構造  
+- [x] 4-1 型と構造  
 **AC**: 列挙 `Mode(STANDBY|PROCESSING|ACTIVE|FREE), Channel, Agent` と `State{mode,active_channel,task{content,channel}}` を定義。
-- [ ] 4-2 ユーティリティ  
+- [x] 4-2 ユーティリティ  
 **AC**:  
 `mode_from_time(now_jst) -> Mode`、  
 `init_active_channel(mode) -> Channel`（ACTIVE→command-center / FREE→lounge）、  
