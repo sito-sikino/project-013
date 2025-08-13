@@ -37,10 +37,10 @@ logs/run.log（空で可）
 
 ## 2. ログ（logger.py／JSONL一元）
 
-- [ ] 2-1 JSONLロガー  
+- [x] 2-1 JSONLロガー  
 **AC**: `log_ok(event_type,channel,actor,payload_summary)` / `log_err(...,error_stage,error_detail)` を提供。  
 行スキーマ固定：`ts,event_type,channel,actor,payload_summary,result,error_stage,error_detail` を `logs/run.log` に追記。ファイルが無ければ自動作成。
-- [ ] 2-2 スナップショットテスト  
+- [x] 2-2 スナップショットテスト  
 **AC**: ok/err を各2行出力し、フォーマット一致。
 
 ---
