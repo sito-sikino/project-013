@@ -99,7 +99,7 @@ logs/run.log（空で可）
 
 ## 8. Slash `/task commit`（最優先）
 
-- [ ] 8-1 パース/バリデーション  
+- [x] 8-1 パース/バリデーション  
 **AC**: `<channel>` ∈ {creation,development}、`<内容>` は文字列。**少なくとも一方**必須。違反は例外（Fail-Fast）。
 - [ ] 8-2 状態更新/決定通知  
 **AC**: `task` 更新→ `active_channel=<channel>` **即上書き**。  
