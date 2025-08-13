@@ -47,9 +47,9 @@ logs/run.log（空で可）
 
 ## 3. ストア（store.py／Redis全文脈）
 
-- [ ] 3-1 接続疎通  
+- [x] 3-1 接続疎通  
 **AC**: `REDIS_URL` で `PING` 成功。
-- [ ] 3-2 API: `read_all / append / reset`  
+- [x] 3-2 API: `read_all / append / reset`  
 **AC**: セッションID `"discord_unified"`、レコード `{agent,channel,timestamp(ISO8601),text}`。  
 追記→読込→リセットの往復テストが通る。
 
