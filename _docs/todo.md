@@ -90,7 +90,7 @@ logs/run.log（空で可）
 
 ## 7. イベントハンドラ骨格（app.py）
 
-- [ ] 7-1 受信口定義（Spectraのみ）  
+- [x] 7-1 受信口定義（Spectraのみ）  
 **AC**: `on_slash(channel?,content?)`, `on_user(channel,text,user_id)`, `on_tick()`, `on_report_0600()` を用意。優先度は **Slash→User→Tick**（直列）。
 - [ ] 7-2 共通シーケンス  
 **AC**: **Redis全文読み→LLM→Typing→Send→Redis追記→log_ok**。どこかで失敗→ **log_err** ＆中断（Fail-Fast）。
