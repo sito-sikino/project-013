@@ -139,7 +139,7 @@ Slash入力と通知を Redis に追記。E2Eで State/Redis/Discord/Log が一�
 
 ## 12. エラーハンドリング（Fail-Fast）
 
-- [ ] 12-1 段階タグ  
+- [x] 12-1 段階タグ  
 **AC**: `error_stage ∈ {settings,slash,plan,typing,send,report,memory}`。例外時は `log_err` を必ず書き、中断・フォールバック無し。
 - [ ] 12-2 人工エラー試験  
 **AC**: 各ステージで意図的に例外を起こし、正しい `error_stage` がログに残る。

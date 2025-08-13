@@ -47,11 +47,11 @@ def _get_redis_connection() -> redis.Redis:
         r.ping()
         return r
     except redis.ConnectionError as e:
-        log_err("store", "system", "system", "Redis connection failed", "connection", str(e))
+        log_err("store", "system", "system", "Redis connection failed", "memory", str(e))
         print(f"FATAL REDIS ERROR: Unable to connect to Redis at {settings.redis.url}: {e}", file=sys.stderr)
         sys.exit(1)
     except Exception as e:
-        log_err("store", "system", "system", "Redis connection error", "connection", str(e))
+        log_err("store", "system", "system", "Redis connection error", "memory", str(e))
         print(f"FATAL REDIS ERROR: Unexpected error during Redis connection: {e}", file=sys.stderr)
         sys.exit(1)
 
@@ -67,7 +67,7 @@ def test_connection() -> bool:
         # _get_redis_connection already handles the error logging and exit
         raise
     except Exception as e:
-        log_err("store", "system", "system", "Redis ping test failed", "ping", str(e))
+        log_err("store", "system", "system", "Redis ping test failed", "memory", str(e))
         return False
 
 
@@ -95,7 +95,7 @@ def read_all() -> List[Record]:
                 )
                 records.append(record)
             except (orjson.JSONDecodeError, KeyError, TypeError) as e:
-                log_err("store", "system", "system", f"Invalid message format: {msg_json[:80]}", "parse", str(e))
+                log_err("store", "system", "system", f"Invalid message format: {msg_json[:80]}", "memory", str(e))
                 # Skip malformed records but continue processing
                 continue
         
@@ -106,7 +106,7 @@ def read_all() -> List[Record]:
         # _get_redis_connection already handles the error logging and exit
         raise
     except Exception as e:
-        log_err("store", "system", "system", "Failed to read messages from Redis", "read", str(e))
+        log_err("store", "system", "system", "Failed to read messages from Redis", "memory", str(e))
         print(f"FATAL REDIS ERROR: Failed to read messages: {e}", file=sys.stderr)
         sys.exit(1)
 
@@ -147,7 +147,7 @@ def append(agent: Agent, channel: Channel, text: str) -> None:
         # _get_redis_connection already handles the error logging and exit
         raise
     except Exception as e:
-        log_err("store", channel, agent, f"Failed to append message: {text[:80]}", "append", str(e))
+        log_err("store", channel, agent, f"Failed to append message: {text[:80]}", "memory", str(e))
         print(f"FATAL REDIS ERROR: Failed to append message: {e}", file=sys.stderr)
         sys.exit(1)
 
@@ -166,7 +166,7 @@ def reset() -> None:
         # _get_redis_connection already handles the error logging and exit
         raise
     except Exception as e:
-        log_err("store", "system", "system", "Failed to reset Redis store", "reset", str(e))
+        log_err("store", "system", "system", "Failed to reset Redis store", "memory", str(e))
         print(f"FATAL REDIS ERROR: Failed to reset store: {e}", file=sys.stderr)
         sys.exit(1)
 
@@ -213,7 +213,7 @@ def _test_store_cycle() -> bool:
         return True
         
     except Exception as e:
-        log_err("store", "system", "system", "Store cycle test failed", "test", str(e))
+        log_err("store", "system", "system", "Store cycle test failed", "memory", str(e))
         print(f"ERROR: Store cycle test failed: {e}", file=sys.stderr)
         return False
 

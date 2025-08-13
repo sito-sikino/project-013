@@ -155,28 +155,42 @@ async def on_report_0600() -> None:
         このハンドラはTask 11-1のDailyReportSchedulerから呼び出されます。
         エラー時はFail-Fast原則により、後続のリセット処理は実行されません。
     """
-    from app import store, state, settings
+    from app import store, state, settings, logger
     
-    # Stage 1: 日報生成・投稿（common_sequenceでSpectra固定・command-center）
-    # Fail-Fast: common_sequenceでのエラーは例外として伝播し、後続処理は実行しない
-    await common_sequence(
-        event_type="report",
-        channel="command-center",
-        actor="spectra",
-        payload_summary="daily_report_0600",
-        llm_kind="report",
-        llm_channel=settings.settings.discord.chan_command_center
-    )
-    
-    # Stage 2: 全文脈リセット（日報送信成功後のみ実行）
-    # Fail-Fast: store.reset()でのエラーはSystemExitで即座停止
-    store.reset()
-    
-    # Stage 3: 状態更新（mode=ACTIVE・active_channel=command-center）
-    # Fail-Fast: state操作でのエラーは例外として伝播
-    from app.state import Mode
-    state.update_mode(Mode.ACTIVE)
-    state.set_active_channel("command-center")
+    try:
+        # Stage 1: 日報生成・投稿（common_sequenceでSpectra固定・command-center）
+        # Fail-Fast: common_sequenceでのエラーは例外として伝播し、後続処理は実行しない
+        await common_sequence(
+            event_type="report",
+            channel="command-center",
+            actor="spectra",
+            payload_summary="daily_report_0600",
+            llm_kind="report",
+            llm_channel=settings.settings.discord.chan_command_center
+        )
+        
+        # Stage 2: 全文脈リセット（日報送信成功後のみ実行）
+        # Fail-Fast: store.reset()でのエラーはSystemExitで即座停止
+        store.reset()
+        
+        # Stage 3: 状態更新（mode=ACTIVE・active_channel=command-center）
+        # Fail-Fast: state操作でのエラーは例外として伝播
+        from app.state import Mode
+        state.update_mode(Mode.ACTIVE)
+        state.set_active_channel("command-center")
+        
+    except Exception as e:
+        # Fail-Fast: 日報関連エラーは全てerror_stage='report'で記録後SystemExit
+        logger.log_err(
+            event_type="report",
+            channel="command-center", 
+            actor="spectra",
+            payload_summary="daily_report_0600",
+            error_stage="report",
+            error_detail=str(e)
+        )
+        import sys
+        sys.exit(1)
 
 
 # 7-1: 優先度制御の基本構造（Slash→User→Tick）
@@ -573,6 +587,10 @@ async def common_sequence(
     llm_channel: str,
 ) -> None:
     """7-2: 共通シーケンス実行（Redis→LLM→Typing→Send→Redis→log_ok）
+    
+    Discord Multi-Agent Systemの中核処理シーケンス。
+    Redis全文脈読み取り → LLM生成 → Discord投稿 → Redis追記の流れで実行し、
+    各段階でのエラーはFail-Fast原則で即座停止します。
 
     Args:
         event_type: イベントタイプ（slash|user_msg|auto_tick|report）
@@ -581,8 +599,18 @@ async def common_sequence(
         payload_summary: ペイロード要約
         llm_kind: LLM種別（reply|auto|report）
         llm_channel: Discord チャンネル ID
+        
+    Raises:
+        SystemExit: 任意の段階でエラーが発生した場合（Fail-Fast原則）
+        
+    Error Stages:
+        - memory: Redis/store関連エラー（Stage 1, 5）
+        - plan: LLM生成エラー（Stage 2）
+        - typing: Discord typing エラー（Stage 3）
+        - send: Discord send エラー（Stage 4）
     """
     from app import store, supervisor, discord, logger, settings, state
+    from app.error_stages import determine_error_stage
 
     try:
         # Stage 1: Redis 全文読み
@@ -638,22 +666,10 @@ async def common_sequence(
 
     except Exception as e:
         # Fail-Fast: エラー時は段階に応じたerror_stageでlog_err後SystemExit
-        error_stage = "memory"  # デフォルト
-
-        # エラー種別の推定
-        error_str = str(e).lower()
-        if "redis" in error_str or "store" in error_str:
-            error_stage = "memory"
-        elif "llm" in error_str or "gemini" in error_str or "generate" in error_str:
-            error_stage = "plan"
-        elif "typing" in error_str:
-            error_stage = "typing"
-        elif "send" in error_str or "discord" in error_str:
-            error_stage = "send"
+        error_stage = determine_error_stage(e, "common_sequence")
 
         logger.log_err(event_type, channel, actor, payload_summary, error_stage, str(e))
         import sys
-
         sys.exit(1)
 
 

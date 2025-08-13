@@ -9,8 +9,22 @@ from dotenv import load_dotenv
 
 
 def fail_fast(message: str) -> None:
-    """設定エラー時の即座終了"""
-    print(f"FATAL CONFIG ERROR: {message}", file=sys.stderr)
+    """設定エラー時の即座終了（12-1: log_errでsettings段階記録）"""
+    # log_errを使用してerror_stage='settings'で記録
+    try:
+        from app.logger import log_err
+        log_err(
+            event_type="settings",
+            channel="system", 
+            actor="system",
+            payload_summary="Configuration error",
+            error_stage="settings",
+            error_detail=message
+        )
+    except ImportError:
+        # 循環インポートを回避するため、log_err使用不可時はstderrに出力
+        print(f"FATAL CONFIG ERROR: {message}", file=sys.stderr)
+    
     sys.exit(1)
 
 
