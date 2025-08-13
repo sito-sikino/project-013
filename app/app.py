@@ -6,6 +6,7 @@ import time
 from typing import Optional, Callable, Union, Any, Tuple
 from enum import Enum
 from dataclasses import dataclass
+from datetime import datetime, timezone, timedelta, date, time as datetime_time
 
 
 def get_channel_name_from_id(channel_id: str) -> str:
@@ -361,6 +362,164 @@ class TickScheduler:
 
 # グローバルスケジューラインスタンス
 tick_scheduler = TickScheduler()
+
+
+class DailyReportScheduler:
+    """日報スケジューラ（11-1：JST 06:00に1日1回のみ実行）
+    
+    毎日JST 06:00に1回だけ日報を生成する機能を提供します。
+    システム起動が06:00後の場合はバックフィル無し（スキップ）で動作し、
+    同日内の重複実行を防止する仕組みを持ちます。
+    
+    Features:
+        - JST（Asia/Tokyo）タイムゾーン対応
+        - 1日1回のみ実行保証（重複実行防止）
+        - バックフィル無し（06:00後起動時はスキップ）
+        - Fail-Fast原則（エラー時即中断）
+        - 1分間隔での監視ループ
+    """
+    
+    def __init__(self) -> None:
+        """DailyReportScheduler初期化
+        
+        システム起動時刻を記録し、JST時間での動作準備を行います。
+        """
+        self.is_running: bool = False
+        self._last_execution_date: Optional[str] = None  # YYYY-MM-DD形式
+        self._startup_time: datetime = datetime.now(timezone(timedelta(hours=9)))  # JST
+        self._task: Optional[asyncio.Task] = None
+        
+    def get_current_jst_time(self) -> datetime:
+        """現在のJST時間を取得
+        
+        Returns:
+            datetime: JST（UTC+9）タイムゾーンでの現在時刻
+        """
+        return datetime.now(timezone(timedelta(hours=9)))
+    
+    def get_report_time(self) -> datetime_time:
+        """設定からレポート時刻（06:00）を取得
+        
+        PROCESSING_AT環境変数から日報実行時刻を読み込みます。
+        
+        Returns:
+            datetime_time: 日報実行時刻（通常は06:00）
+            
+        Raises:
+            ValueError: 時刻フォーマットが不正な場合
+        """
+        from app import settings
+        
+        processing_time_str = settings.settings.schedule.processing_at  # "06:00"
+        hour, minute = map(int, processing_time_str.split(":"))
+        return datetime_time(hour, minute)
+    
+    def should_trigger_report(self) -> bool:
+        """日報トリガーが必要かどうか判定
+        
+        以下の条件をすべて満たす場合のみTrueを返します：
+        1. 現在時刻が設定時刻（06:00）と一致
+        2. システム起動時刻が設定時刻以前（バックフィル無し原則）
+        3. 同日内でまだ実行されていない（重複実行防止）
+        
+        Returns:
+            bool: 日報実行が必要な場合True、そうでなければFalse
+        """
+        current_jst = self.get_current_jst_time()
+        report_time = self.get_report_time()
+        
+        # 06:00丁度でなければトリガーしない
+        if not (current_jst.hour == report_time.hour and current_jst.minute == report_time.minute):
+            return False
+            
+        # 起動時間が06:00後の場合はスキップ（バックフィル無し）
+        if self._is_after_report_time():
+            return False
+            
+        # 同日に既に実行済みの場合はスキップ
+        current_date_str = current_jst.date().strftime("%Y-%m-%d")
+        if self._last_execution_date == current_date_str:
+            return False
+            
+        return True
+    
+    def _is_after_report_time(self) -> bool:
+        """システム起動時刻がレポート時刻（06:00）後かどうか判定
+        
+        バックフィル無し原則により、システム起動が06:00後の場合は
+        その日の日報生成をスキップします。
+        
+        Returns:
+            bool: 起動時刻が日報時刻より後の場合True
+        """
+        startup_time = self._startup_time.time()
+        report_time = self.get_report_time()
+        
+        # 起動時刻が06:00以降の場合は後回し（バックフィル無し）
+        return startup_time > report_time
+    
+    def _mark_execution_completed(self, execution_date: date) -> None:
+        """実行完了マーキング
+        
+        指定された日付での日報実行完了を記録し、重複実行を防止します。
+        
+        Args:
+            execution_date: 実行完了日（date型）
+        """
+        self._last_execution_date = execution_date.strftime("%Y-%m-%d")
+    
+    async def _execute_daily_report(self) -> None:
+        """日報実行処理（on_report_0600呼び出し）
+        
+        実際の日報生成処理を実行し、完了後に実行済みマーキングを行います。
+        
+        Raises:
+            Exception: on_report_0600実行でエラーが発生した場合（Fail-Fast）
+        """
+        await on_report_0600()
+        self._mark_execution_completed(self.get_current_jst_time().date())
+    
+    async def _monitoring_iteration(self) -> None:
+        """監視イテレーション（1回分）
+        
+        トリガー条件をチェックし、必要に応じて日報実行を行います。
+        1分間隔の監視ループから呼び出されます。
+        """
+        if self.should_trigger_report():
+            await self._execute_daily_report()
+    
+    async def start(self) -> None:
+        """スケジューラ開始（監視ループ）
+        
+        1分間隔でトリガー条件を監視し、06:00になった際に日報を実行します。
+        すでに動作中の場合はエラーとなります。
+        
+        Raises:
+            RuntimeError: 既にスケジューラが動作中の場合
+        """
+        if self.is_running:
+            raise RuntimeError("DailyReportScheduler is already running")
+        
+        self.is_running = True
+        
+        try:
+            # 1分間隔で監視（06:00判定のため）
+            while self.is_running:
+                await self._monitoring_iteration()
+                await asyncio.sleep(60)  # 1分待機
+        finally:
+            self.is_running = False
+    
+    def stop(self) -> None:
+        """スケジューラ停止
+        
+        監視ループを停止します。現在実行中の日報処理は完了を待ちません。
+        """
+        self.is_running = False
+
+
+# グローバル日報スケジューラインスタンス
+daily_report_scheduler = DailyReportScheduler()
 
 
 async def common_sequence(
