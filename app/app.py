@@ -132,9 +132,51 @@ async def on_tick() -> None:
 
 
 async def on_report_0600() -> None:
-    """日報処理ハンドラ（特別タイミング）"""
-    print("Daily report event received at 06:00")
-    # TODO: 本格実装（日報生成・Redis全リセット等）
+    """日報処理ハンドラ（11-2：06:00特別タイミング）
+    
+    毎日JST 06:00に実行される日報生成・投稿・システムリセット処理。
+    以下の順序で処理を実行します：
+    
+    1. common_sequence経由でSpectra固定・500字以内の日報をcommand-centerに投稿
+    2. 投稿成功後にRedis全文脈をリセット
+    3. システム状態をACTIVEモード・command-centerアクティブに設定
+    
+    Features:
+        - Spectra固定投稿（Bot選択なし）
+        - LLM1回実行（500字制限内）
+        - Fail-Fast原則（エラー時は即座停止）
+        - 送信成功後の確実なリセット処理
+    
+    Raises:
+        Exception: common_sequence実行時のエラー（Fail-Fast原則で即座停止）
+        SystemExit: store.reset()またはstate操作での致命的エラー
+        
+    Note:
+        このハンドラはTask 11-1のDailyReportSchedulerから呼び出されます。
+        エラー時はFail-Fast原則により、後続のリセット処理は実行されません。
+    """
+    from app import store, state, settings
+    
+    # Stage 1: 日報生成・投稿（common_sequenceでSpectra固定・command-center）
+    # Fail-Fast: common_sequenceでのエラーは例外として伝播し、後続処理は実行しない
+    await common_sequence(
+        event_type="report",
+        channel="command-center",
+        actor="spectra",
+        payload_summary="daily_report_0600",
+        llm_kind="report",
+        llm_channel=settings.settings.discord.chan_command_center
+    )
+    
+    # Stage 2: 全文脈リセット（日報送信成功後のみ実行）
+    # Fail-Fast: store.reset()でのエラーはSystemExitで即座停止
+    store.reset()
+    
+    # Stage 3: 状態更新（mode=ACTIVE・active_channel=command-center）
+    # Fail-Fast: state操作でのエラーは例外として伝播
+    from app.state import Mode
+    state.update_mode(Mode.ACTIVE)
+    state.set_active_channel("command-center")
 
 
 # 7-1: 優先度制御の基本構造（Slash→User→Tick）

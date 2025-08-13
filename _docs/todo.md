@@ -130,9 +130,9 @@ Slash入力と通知を Redis に追記。E2Eで State/Redis/Discord/Log が一�
 
 ## 11. 日報（06:00／PROCESSING）
 
-- [ ] 11-1 トリガ  
+- [x] 11-1 トリガ  
 **AC**: JSTで **1日1回 06:00** のみ。起動が6:00後ならスキップ（バックフィル無し）。
-- [ ] 11-2 生成/リセット  
+- [x] 11-2 生成/リセット  
 **AC**: **Spectra固定・500字以内**・**LLM1回**・投稿先=command-center。送信成功後に `store.reset()`、`mode=ACTIVE`、`active_channel=command-center`。
 
 ---
