@@ -79,11 +79,11 @@ logs/run.log（空で可）
 
 ## 6. Supervisor（supervisor.py）
 
-- [ ] 6-1 プロンプト  
+- [x] 6-1 プロンプト  
 **AC**: 入力 `{kind,channel,task,context,limits,persona,report_config}`、  
 出力は厳密JSON `{"speaker":"spectra|lynq|paz","text":"..."}`（パース失敗→例外）。  
 チャンネル上限（cc=100/cr=200/dev=200/lo=30）を **途中で切らず** 守る指示を含む。
-- [ ] 6-2 生成 `generate(...)`  
+- [x] 6-2 生成 `generate(...)`  
 **AC**: kind=`reply|auto|report` で **LLM1回**・タイムアウト設定・リトライ無し。reportは `speaker="spectra"`・500字以内。モックで3種が所定JSONを返す。
 
 ---

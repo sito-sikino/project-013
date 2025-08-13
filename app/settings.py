@@ -90,6 +90,7 @@ class RedisConfig:
 class AIServiceConfig:
     """AI サービス設定"""
     gemini_api_key: str
+    gemini_timeout_seconds: int
 
 
 @dataclass(frozen=True)
@@ -166,7 +167,8 @@ def load_settings() -> Settings:
     
     # AIサービス設定
     ai_service_config = AIServiceConfig(
-        gemini_api_key=get_required_env("GEMINI_API_KEY")
+        gemini_api_key=get_required_env("GEMINI_API_KEY"),
+        gemini_timeout_seconds=get_required_int("GEMINI_TIMEOUT_SECONDS")
     )
     
     # Tick設定（確率値の範囲検証付き）
