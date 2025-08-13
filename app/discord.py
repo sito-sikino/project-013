@@ -2,6 +2,7 @@
 # 受信: discord.py / 送信: httpx REST API
 
 import discord
+import httpx
 from app.settings import settings
 import app.app as app_module
 
@@ -82,3 +83,69 @@ async def start_spectra_client() -> None:
 
     client = SpectraDiscordClient()
     await client.start(settings.discord.spectra_token)
+
+
+def get_bot_token(bot: str) -> str:
+    """Bot名からトークンを取得"""
+    tokens = {
+        "spectra": settings.discord.spectra_token,
+        "lynq": settings.discord.lynq_token,
+        "paz": settings.discord.paz_token,
+    }
+    if bot not in tokens:
+        raise ValueError(f"Unknown bot: {bot}")
+    return tokens[bot]
+
+
+async def typing(bot: str, channel_id: str) -> int:
+    """Discord REST API: typing indicator送信"""
+    # Fail-Fast: パラメータ検証
+    if not bot:
+        raise ValueError("Bot name cannot be empty")
+    if not channel_id:
+        raise ValueError("Channel ID cannot be empty")
+
+    token = get_bot_token(bot)
+    url = f"https://discord.com/api/v10/channels/{channel_id}/typing"
+    headers = {"Authorization": f"Bot {token}", "Content-Type": "application/json"}
+
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(url, headers=headers)
+            return response.status_code
+    except httpx.RequestError as e:
+        raise ValueError(f"Failed to send typing indicator: {e}") from e
+
+
+async def send(bot: str, channel_id: str, text: str) -> str:
+    """Discord REST API: メッセージ送信"""
+    # Fail-Fast: パラメータ検証
+    if not bot:
+        raise ValueError("Bot name cannot be empty")
+    if not channel_id:
+        raise ValueError("Channel ID cannot be empty")
+    if not text:
+        raise ValueError("Message text cannot be empty")
+    if len(text) > 2000:
+        raise ValueError(f"Message text too long: {len(text)} characters (max 2000)")
+
+    token = get_bot_token(bot)
+    url = f"https://discord.com/api/v10/channels/{channel_id}/messages"
+    headers = {"Authorization": f"Bot {token}", "Content-Type": "application/json"}
+    payload = {"content": text}
+
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(url, headers=headers, json=payload)
+            if response.status_code == 200:
+                data = response.json()
+                message_id = data.get("id")
+                if not message_id:
+                    raise ValueError("Discord API returned empty message ID")
+                return message_id
+            else:
+                raise ValueError(
+                    f"Discord API error: {response.status_code} - {response.text}"
+                )
+    except httpx.RequestError as e:
+        raise ValueError(f"Failed to send message: {e}") from e

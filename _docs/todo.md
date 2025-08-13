@@ -71,7 +71,7 @@ logs/run.log（空で可）
 
 - [x] 5-1 受信（Spectraのみ／discord.py）  
 **AC**: メッセージ受信イベントと `/task commit` スラッシュを受け取り、app.py の `on_user` / `on_slash` を呼べる。ローカルで1回動作確認。
-- [ ] 5-2 送信（REST）  
+- [x] 5-2 送信（REST）  
 **AC**: `discord.py` の送信は使わず、`httpx` で REST `typing/send` を実装（`discord.py` は受信専用）。  
 `typing(bot, channel_id)` が2xx、`send(bot, channel_id, text)->message_id` が2xx。
 
