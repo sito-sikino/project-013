@@ -157,9 +157,9 @@ Slash入力と通知を Redis に追記。E2Eで State/Redis/Discord/Log が一�
 
 ## 14. Discord 側準備（最小）
 
-- [ ] 14-1 Bot/権限/Slash  
+- [x] 14-1 Bot/権限/Slash  
 **AC**: 3Bot招待（4CHへ送信可）、Spectraにメッセージ内容 intent、`/task commit` を登録（channel:enum, content:string）。
-- [ ] 14-2 ID採番  
+- [x] 14-2 ID採番  
 **AC**: 4CHのIDを `.env` に記入し `settings.py` で取得できる。
 
 ---

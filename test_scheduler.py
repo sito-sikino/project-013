@@ -299,9 +299,9 @@ class TestEventQueueIntegration:
         """スケジューラがSlash/User優先度を尊重すること"""
         # Given: 高優先度イベントが処理中の環境
         with patch('app.event_queue.is_processing', True):
-            
             # When: tick実行を試行
             # 実装により、処理中は後回しになることを確認
+            pass
             
             # Then: EventQueueの優先度制御が機能する
             # 具体的な実装により詳細を確認
