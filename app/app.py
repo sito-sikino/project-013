@@ -579,22 +579,47 @@ daily_report_scheduler = DailyReportScheduler()
 
 
 class ModeTrackingScheduler:
-    """モード追従スケジューラ（13-1：時刻連動でstate.mode自動更新）
+    """モード追従＆日報統合スケジューラ（13-1/13-2）
+
+    JST時刻に基づいてシステムモードを自動的に更新し、06:00に日報を実行します。
     
-    JST時刻に基づいてシステムモードを自動的に更新します。
-    STANDBY（00:00-06:00）→ ACTIVE（06:00-20:00）→ FREE（20:00-24:00）
-    モード切り替え時にactive_channelも適切に設定します。
+    Time Schedule:
+        - STANDBY（00:00-06:00）→ PROCESSING（06:00）→ ACTIVE（06:01-19:59）→ FREE（20:00-23:59）
+        - モード切り替え時にactive_channelも適切に設定
+        - 06:00には日報生成を実行
     
     Features:
-        - 1分間隔での時刻監視
+        - 1分間隔での時刻監視による正確なモード切り替え
         - 不要な更新の回避（モードが変更済みの場合はスキップ）
+        - 06:00に1日1回のみ日報実行（重複実行防止機能）
+        - バックフィル無し（06:00後起動時はスキップ）
         - Fail-Fast原則（エラー時即中断）
+        
+    Integration:
+        - 既存のDailyReportSchedulerと統合済み
+        - state.py経由でのモード・チャンネル管理
+        - 単一スケジューラで2つの機能を統合管理
     """
     
     def __init__(self) -> None:
-        """ModeTrackingScheduler初期化"""
+        """ModeTrackingScheduler初期化
+        
+        State Initialization:
+            - is_running: スケジューラ実行状態フラグ
+            - _task: 非同期タスク管理用（未使用だが後方互換性のため保持）
+            - _last_report_date: 最後に日報実行した日付（YYYY-MM-DD、重複防止用）
+            - _startup_time: システム起動時刻（バックフィル防止判定用）
+            
+        Note:
+            起動時刻はstate.get_current_jst_time()を使用してJSTで記録されます。
+        """
         self.is_running: bool = False
         self._task: Optional[asyncio.Task] = None
+        # 日報関連の状態追跡（13-2追加）
+        self._last_report_date: Optional[str] = None  # YYYY-MM-DD形式
+        # 起動時刻を現在のJST時刻で記録（state.get_current_jst_time()を使用）
+        from app import state
+        self._startup_time: datetime = state.get_current_jst_time()  # JST起動時刻  # JST起動時刻
         
     async def start(self) -> None:
         """スケジューラー開始（監視ループ）
@@ -602,8 +627,17 @@ class ModeTrackingScheduler:
         1分間隔でモード追従を監視し、時刻に応じたモード更新を行います。
         すでに動作中の場合はエラーとなります。
         
+        Monitoring Process:
+            1. _monitoring_iteration()を1分間隔で実行
+            2. モード更新チェック（必要時のみstate更新）
+            3. 06:00時の日報実行チェック
+            
         Raises:
             RuntimeError: 既にスケジューラが動作中の場合
+            
+        Note:
+            このメソッドはblockingなので、別のasyncio.Taskとして実行することを推奨します。
+            監視ループは無限に継続し、stop()が呼ばれるまで終了しません。
         """
         if self.is_running:
             raise RuntimeError("ModeTrackingScheduler is already running")
@@ -622,6 +656,15 @@ class ModeTrackingScheduler:
         """スケジューラー停止
         
         監視ループを停止します。現在実行中のモード更新処理は完了を待ちません。
+        
+        Implementation:
+            - is_runningフラグをFalseに設定
+            - 次回ループチェック時に監視が終了
+            - 現在の_monitoring_iteration()は完了まで継続
+            
+        Note:
+            このメソッドは同期的で即座に復帰しますが、実際の停止は
+            次回のwhile is_runningチェック時に発生します。
         """
         self.is_running = False
     
@@ -629,15 +672,37 @@ class ModeTrackingScheduler:
         """監視イテレーション（1回分）
         
         現在時刻からモードを判定し、必要に応じてstate更新を行います。
+        06:00の場合は日報実行も行います（13-2追加）。
         1分間隔の監視ループから呼び出されます。
+        
+        Processing Steps:
+            1. モード更新チェック（update_mode_from_time）
+            2. 日報トリガーチェック（_should_trigger_daily_report）  
+            3. 日報実行（_execute_daily_report + _mark_daily_report_executed）
+            
+        Error Handling:
+            Fail-Fast原則に従い、すべてのエラーは呼び出し元に伝播されます。
         """
+        # モード更新
         self.update_mode_from_time()
+        
+        # 06:00日報実行（13-2追加）
+        if self._should_trigger_daily_report():
+            await self._execute_daily_report()
+            self._mark_daily_report_executed()
     
     def update_mode_from_time(self) -> None:
-        """時刻からモードを更新
+        """時刻からモードを更新（13-1実装）
         
         現在のJST時刻を取得し、mode_from_time()で適切なモードを判定。
         現在のモードと異なる場合のみstate更新を実行します。
+        
+        効率化:
+            - 不要な更新を避けるため、モードが既に正しい場合はスキップ
+            - update_mode()内でactive_channelも自動更新される
+            
+        Note:
+            このメソッドはスケジューラの監視ループから1分間隔で呼び出されます。
         """
         from app import state
         
@@ -648,12 +713,82 @@ class ModeTrackingScheduler:
         # 現在のstate取得
         current_state = state.get_state()
         
-        # モードが既に正しい場合は更新しない
+        # モードが既に正しい場合は更新しない（効率化）
         if current_state.mode == expected_mode:
             return
         
         # モード更新（update_mode内でactive_channelも自動更新される）
         state.update_mode(expected_mode)
+    
+    def _should_trigger_daily_report(self) -> bool:
+        """日報トリガーが必要かどうか判定（13-2追加）
+        
+        以下の条件をすべて満たす場合のみTrueを返します：
+        1. 現在時刻が06:00と一致
+        2. システム起動時刻が06:00以前（バックフィル無し原則）
+        3. 同日内でまだ実行されていない（重複実行防止）
+        
+        Returns:
+            bool: 日報実行が必要な場合True、そうでなければFalse
+        """
+        from app import state, settings
+        from datetime import time as datetime_time
+        
+        current_jst = state.get_current_jst_time()
+        
+        # 設定から06:00時刻を取得
+        processing_time_str = settings.settings.schedule.processing_at  # "06:00"
+        hour, minute = map(int, processing_time_str.split(":"))
+        
+        # 06:00丁度でなければトリガーしない
+        if not (current_jst.hour == hour and current_jst.minute == minute):
+            return False
+        
+        # 起動時間が06:00後の場合はスキップ（バックフィル無し）
+        startup_time = self._startup_time.time()
+        report_time = datetime_time(hour, minute)
+        if startup_time > report_time:
+            return False
+        
+        # 同日に既に実行済みの場合はスキップ
+        current_date_str = current_jst.date().strftime("%Y-%m-%d")
+        if self._last_report_date == current_date_str:
+            return False
+        
+        return True
+    
+    async def _execute_daily_report(self) -> None:
+        """日報実行処理（on_report_0600呼び出し）（13-2追加）
+        
+        実際の日報生成処理を実行します。
+        Fail-Fast原則に従い、エラーは伝播させて処理を停止します。
+        
+        Raises:
+            Exception: on_report_0600実行でエラーが発生した場合（Fail-Fast）
+            
+        Note:
+            この処理は06:00に1日1回のみ実行され、完了後に_mark_daily_report_executed()
+            によって重複実行防止マークが設定されます。
+        """
+        await on_report_0600()
+    
+    def _mark_daily_report_executed(self) -> None:
+        """実行完了マーキング（13-2追加）
+        
+        本日の日報実行完了を記録し、重複実行を防止します。
+        
+        Implementation:
+            - 現在のJST日付をYYYY-MM-DD形式で_last_report_dateに保存
+            - 同日内の次回チェック時に_should_trigger_daily_report()がFalseを返すようになる
+            
+        Note:
+            このマーキングはメモリ内のみで、システム再起動時はリセットされます。
+            これは意図的な設計で、再起動後の初回06:00では日報が実行されます。
+        """
+        from app import state
+        
+        current_jst = state.get_current_jst_time()
+        self._last_report_date = current_jst.date().strftime("%Y-%m-%d")
 
 
 # グローバルモード追従スケジューラインスタンス
