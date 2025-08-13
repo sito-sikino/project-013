@@ -119,7 +119,7 @@ Slash入力と通知を Redis に追記。E2Eで State/Redis/Discord/Log が一�
 
 ## 10. 自発発言（tick）
 
-- [ ] 10-1 スケジューラ  
+- [x] 10-1 スケジューラ  
 **AC**: dev=15s/100%（**最大5分**で停止）、prod=300s/33%。外れtickは何もしない。
 - [ ] 10-2 投稿  
 **AC**: `active_channel` に **選定Bot名義**で Typing→Send。LLM1回・Redis追記・log_ok。

@@ -2,7 +2,8 @@
 # メインアプリケーションエントリーポイント
 
 import asyncio
-from typing import Optional, Callable
+import time
+from typing import Optional, Callable, Union
 from enum import Enum
 from dataclasses import dataclass
 
@@ -169,6 +170,110 @@ class EventQueue:
 
 # グローバルイベントキュー
 event_queue = EventQueue()
+
+
+class TickScheduler:
+    """自発発言スケジューラ（10-1：dev=15s/100%・prod=300s/33%・確率制御）"""
+
+    def __init__(self):
+        """スケジューラ初期化"""
+        self.is_running = False
+        self._task = None
+        self._start_time = None
+        
+        # 設定値をバリデーション（Fail-Fast）
+        self._validate_settings()
+
+    def _validate_settings(self):
+        """設定値検証（Fail-Fast原則）"""
+        from app import settings
+        
+        prob_dev = settings.settings.tick.tick_prob_dev
+        prob_prod = settings.settings.tick.tick_prob_prod
+        
+        if not (0.0 <= prob_dev <= 1.0):
+            raise ValueError(f"Invalid tick_prob_dev: {prob_dev}. Must be 0.0-1.0")
+        if not (0.0 <= prob_prod <= 1.0):
+            raise ValueError(f"Invalid tick_prob_prod: {prob_prod}. Must be 0.0-1.0")
+
+    def get_tick_interval(self) -> int:
+        """環境別tick間隔取得"""
+        from app import settings
+        
+        if settings.settings.env == "dev":
+            return settings.settings.tick.tick_interval_sec_dev
+        else:
+            return settings.settings.tick.tick_interval_sec_prod
+
+    def get_tick_probability(self) -> float:
+        """環境別tick確率取得"""
+        from app import settings
+        
+        if settings.settings.env == "dev":
+            return settings.settings.tick.tick_prob_dev
+        else:
+            return settings.settings.tick.tick_prob_prod
+
+    def get_max_runtime(self) -> Optional[int]:
+        """最大実行時間取得（dev環境のみ）"""
+        from app import settings
+        
+        if settings.settings.env == "dev":
+            return settings.settings.tick.max_test_minutes * 60  # 分→秒変換
+        else:
+            return None  # prod環境は無制限
+
+    def should_execute_tick(self) -> bool:
+        """確率判定でtick実行可否を決定"""
+        import random
+        probability = self.get_tick_probability()
+        return random.random() < probability
+
+    async def _enqueue_tick_event(self):
+        """EventQueueにtickイベントを追加"""
+        await event_queue.enqueue(EventPriority.TICK, on_tick)
+
+    async def start(self):
+        """スケジューラ開始"""
+        if self.is_running:
+            raise RuntimeError("TickScheduler is already running")
+        
+        self.is_running = True
+        self._start_time = time.time()
+        
+        try:
+            await self._run_loop()
+        finally:
+            self.is_running = False
+
+    async def _run_loop(self):
+        """メインスケジューリングループ"""
+        import time
+        
+        interval = self.get_tick_interval()
+        max_runtime = self.get_max_runtime()
+        
+        while self.is_running:
+            # dev環境での最大実行時間チェック
+            if max_runtime and self._start_time:
+                elapsed = time.time() - self._start_time
+                if elapsed >= max_runtime:
+                    break
+            
+            # 確率判定
+            if self.should_execute_tick():
+                await self._enqueue_tick_event()
+            
+            # 次のtickまで待機
+            await asyncio.sleep(interval)
+
+    def stop(self):
+        """スケジューラ停止"""
+        self.is_running = False
+
+
+# グローバルスケジューラインスタンス
+tick_scheduler = TickScheduler()
 
 
 async def common_sequence(
