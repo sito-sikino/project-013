@@ -27,6 +27,27 @@ def get_channel_name_from_id(channel_id: str) -> str:
     return channel_mapping.get(channel_id, "unknown")
 
 
+def select_typing_bot(channel_name: str, text: str) -> str:
+    """即時Typing用の簡単なボット選択
+    
+    Args:
+        channel_name: 論理チャンネル名
+        text: ユーザーメッセージ
+        
+    Returns:
+        str: 選択されたボット名 (spectra|lynq|paz)
+    """
+    # チャンネル基準の簡単な選択ルール（LLMによる最終選択は後で実行）
+    channel_bot_preference = {
+        "command-center": "spectra",  # 汎用・管理系
+        "creation": "paz",           # 創作系
+        "development": "lynq",       # 開発系
+        "lounge": "spectra",         # 雑談系
+        "unknown": "spectra"         # デフォルト
+    }
+    return channel_bot_preference.get(channel_name, "spectra")
+
+
 async def on_user(channel: str, text: str, user_id: str) -> None:
     """ユーザーメッセージ受信ハンドラ"""
     # Fail-Fast: 必須パラメータ検証
@@ -37,10 +58,14 @@ async def on_user(channel: str, text: str, user_id: str) -> None:
     if not user_id:
         raise ValueError("User ID cannot be empty")
 
-    from app import store
+    from app import store, discord
     
     # チャンネルIDを論理チャンネル名にマッピング
     channel_name = get_channel_name_from_id(channel)
+    
+    # 即時Typing表示（体感速度向上）
+    typing_bot = select_typing_bot(channel_name, text)
+    await discord.typing(typing_bot, channel)
     
     # ユーザーメッセージをRedisに格納
     store.append("user", channel_name, text)
