@@ -14,7 +14,7 @@
 ```
 
 app/{app.py,settings.py,state.py,store.py,discord.py,supervisor.py,logger.py}
-docs/{spec.md,architecture.md,CLAUDE.md}
+_docs/{spec.md,architecture.md,CLAUDE.md,todo.md,dev-log/}
 logs/run.log（空で可）
 .env.template
 

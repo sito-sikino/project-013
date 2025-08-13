@@ -12,8 +12,12 @@ store.py        # Redis全文脈: read\_all / append / reset
 discord.py      # Typing / REST送信（Botトークン切替）
 supervisor.py   # prompt() / generate() ＊LLM 1回→{speaker,text}
 logger.py       # JSONL一元ログ（system+conversation）
-docs/
+_docs/
 spec.md         # 要件定義
+architecture.md # アーキテクチャ設計
+CLAUDE.md       # 開発原則
+todo.md         # タスク管理
+dev-log/        # 実装ログ
 logs/
 run.log         # JSONL（1ファイル一元管理）
 .env
