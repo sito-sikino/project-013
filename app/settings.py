@@ -4,7 +4,6 @@
 import os
 import sys
 from dataclasses import dataclass
-from typing import Union
 from dotenv import load_dotenv
 
 
@@ -92,6 +91,7 @@ class DiscordConfig:
     chan_creation: str
     chan_development: str
     chan_lounge: str
+    guild_id: str
 
 
 @dataclass(frozen=True)
@@ -171,7 +171,8 @@ def load_settings() -> Settings:
         chan_command_center=get_required_env("CHAN_COMMAND_CENTER"),
         chan_creation=get_required_env("CHAN_CREATION"),
         chan_development=get_required_env("CHAN_DEVELOPMENT"),
-        chan_lounge=get_required_env("CHAN_LOUNGE")
+        chan_lounge=get_required_env("CHAN_LOUNGE"),
+        guild_id=get_required_env("GUILD_ID")
     )
     
     # Redis設定

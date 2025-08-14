@@ -22,6 +22,61 @@ class SpectraDiscordClient(discord.Client):
         if not self.user:
             raise RuntimeError("Discord client failed to initialize user")
         print(f"Spectra Discord Client ready: {self.user}")
+        
+        # スラッシュコマンド登録
+        await self._register_slash_commands()
+
+    async def _register_slash_commands(self) -> None:
+        """スラッシュコマンド登録処理"""
+        try:
+            # /task コマンドの定義
+            task_command = {
+                "name": "task",
+                "description": "タスクのコミットとチャンネル切り替え",
+                "options": [
+                    {
+                        "name": "channel",
+                        "description": "切り替え先チャンネル",
+                        "type": 3,  # STRING type
+                        "required": False,
+                        "choices": [
+                            {"name": "creation", "value": "creation"},
+                            {"name": "development", "value": "development"}
+                        ]
+                    },
+                    {
+                        "name": "content",
+                        "description": "タスク内容",
+                        "type": 3,  # STRING type
+                        "required": False
+                    }
+                ]
+            }
+            
+            # 環境に応じてギルド登録（dev）またはグローバル登録（prod）を選択
+            if settings.environment.env == "dev":
+                # 開発環境：ギルド登録（即座反映）
+                url = f"https://discord.com/api/v10/applications/{self.user.id}/guilds/{settings.discord.guild_id}/commands"
+                registration_type = "Guild"
+            else:
+                # 本番環境：グローバル登録（遅延反映）
+                url = f"https://discord.com/api/v10/applications/{self.user.id}/commands"
+                registration_type = "Global"
+            
+            headers = {
+                "Authorization": f"Bot {settings.discord.spectra_token}",
+                "Content-Type": "application/json"
+            }
+            
+            async with httpx.AsyncClient() as client:
+                response = await client.post(url, headers=headers, json=task_command)
+                if response.status_code in [200, 201]:
+                    print(f"✅ /task スラッシュコマンド登録完了 ({registration_type})")
+                else:
+                    print(f"❌ スラッシュコマンド登録エラー ({registration_type}): {response.status_code} - {response.text}")
+                    
+        except Exception as e:
+            print(f"❌ スラッシュコマンド登録でエラー: {e}")
 
     async def on_message(self, message: discord.Message) -> None:
         """メッセージ受信処理"""
