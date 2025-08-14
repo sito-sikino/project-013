@@ -1016,8 +1016,36 @@ async def execute_slash_command(
         sys.exit(1)
 
 
-if __name__ == "__main__":
+async def main() -> None:
+    """メインアプリケーション起動 - 全並行タスク統合実行"""
     from app.discord import start_spectra_client
+    from app.settings import settings
+    
+    print("🚀 Discord Multi-Agent System 起動開始")
+    print(f"📊 環境: {settings.environment.env}")
+    print(f"⏰ Tick間隔: {settings.tick.interval_sec_dev}秒 (確率: {settings.tick.prob_dev})")
+    print(f"⏱️  最大テスト時間: {settings.tick.max_test_minutes}分")
+    
+    try:
+        # 全並行タスクを同時起動
+        print("🔄 並行タスク起動中...")
+        await asyncio.gather(
+            # Discord Gateway受信
+            start_spectra_client(),
+            # イベント直列実行ループ  
+            event_queue.process_events(),
+            # 自発発言スケジューラ
+            tick_scheduler.start(),
+            # モード追従・日報統合スケジューラ
+            mode_tracking_scheduler.start(),
+            return_exceptions=True
+        )
+    except Exception as e:
+        print(f"❌ システム起動エラー: {e}")
+        import sys
+        sys.exit(1)
 
-    # 動作確認用メイン関数
-    asyncio.run(start_spectra_client())
+
+if __name__ == "__main__":
+    print("🎯 アプリケーション開始")
+    asyncio.run(main())
